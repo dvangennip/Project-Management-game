@@ -16,19 +16,38 @@ body {
 	overflow-y: hidden;
 }
 
-h4 {
-	margin: 1em 0 0;
+h1, h2, h3, h4 {
+	margin: 1em 0 0 0;
+}
+
+p {
+	align-self: flex-start;
+}
+
+a {
+	text-decoration: none;
+}
+a:hover,
+a:active {
+	text-decoration: underline;
 }
 
 /* ------------------------- */
 
-#description {
+.description {
 	background: #eee;
 	color: #222;
-	display: none; /*flex;*/
+	/*display: flex;*/
+	display: none;
 	flex-direction: column;
-	justify-content: center;
+	justify-content: flex-start;
 	align-items: center;
+	transition: max-height ease-in-out 0.5s;
+	max-height: 1000px;
+}
+
+.description-hidden {
+	max-height: 0;
 }
 
 #description_area {
@@ -36,6 +55,129 @@ h4 {
 	flex-direction: column;
 	justify-content: center;
 	align-items: center;
+	max-width: 600px;
+	line-height: 1.5;
+	font-size: 1.1em;
+}
+
+.description-button {
+	flex-shrink: 0;
+	margin-bottom: -50px;
+	z-index: 5;
+	padding: 5px;
+	border-radius: 0 0 100% 100%;
+	border: none;
+	background: #eee;
+	color: #fff;
+	font-weight: 700;
+	font-size: 2rem;
+	width: 50px;
+	height: 50px;
+	transition: right ease-in-out 0.5s;
+	right: 50%;
+}
+.description-button:hover {
+	background: #e55;
+}
+.description-button:active {
+	background: #c33;
+}
+.description-button span {
+	display: block;
+	transition: transform ease-in-out 0.5s;
+	/*transform: rotate(0deg);*/
+}
+
+.description-hidden .description-button {
+	top: 0;
+	right: 1%;
+	position: absolute;
+}
+.description-hidden .description-button span {
+	transform: rotate(60deg);
+}
+
+/* ------------------------- */
+
+#timeline {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	background: #ffe600;
+	color: #333;
+}
+
+#timeline_area {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	align-content: center;
+	min-height: 35px;
+	padding: 5px;
+}
+
+.week-item {
+	position: absolute;
+	color: #222;
+	border: 2px solid #fff;
+	border-radius: 100%;
+	padding: 5px;
+	min-width: 20px;
+	min-height: 20px;
+	margin-left: -15px;
+	align-items: center;
+	text-align: center;
+	display: block;
+	align-items: center;
+	line-height: 20px;
+	font-weight: 700;
+	z-index: 1;
+	background: #ffe600;
+	user-select: none;
+}
+
+.week-item-now {
+	position: absolute;
+	width: 2px;
+	background: #ffe600;
+	height: 100%;
+}
+
+.progress-button {
+	position: absolute;
+	left: 1%;
+	background: #7c1;
+	border: 2px solid #fff;
+	border-radius: 0 20px 20px 0;
+	padding: 6px;
+	color: #222;
+	font-weight: 700;
+	font-size: 0.9em;
+	animation-name: progressbutton;
+	animation-duration: 3s;
+	animation-iteration-count: infinite;
+}
+
+@keyframes progressbutton {
+	0%   {background-color: #7c1;}
+	50%  {background-color: transparent;}
+	100% {background-color: #7c1;}
+}
+
+.progress-button:hover {
+	animation: none;
+	background: #8d2;
+}
+.progress-button:active {
+	animation: none;
+	background: #9e3;
+}
+
+.progress-button.cannot-progress {
+	animation: none;
+	background: #e99;
+	color: #966;
 }
 
 /* ------------------------- */
@@ -88,17 +230,6 @@ h4 {
 .worker-extra:hover,
 .worker-extra:active {
 	background-color: #eb9;
-}
-
-/* ------------------------- */
-
-#timeline {
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	align-items: center;
-	background: #ffe600;
-	color: #333;
 }
 
 /* ------------------------- */
@@ -157,6 +288,13 @@ h4 {
 
 .activity-completed {
 	background: #464;
+}
+
+.activity-can-accept-workers {
+	/*TODO*/
+}
+.activity-cannot-accept-workers {
+	/*TODO*/	
 }
 
 #activity_start {

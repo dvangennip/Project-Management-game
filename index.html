@@ -9,19 +9,24 @@
 		<script type="text/javascript" src="game_logic.js"></script>
 	</head>
 	<body>
-		<section id="description">
+		<section id="description" class="description">
 			<div id="description_area">
 				<h1>Project management game</h1>
-				<p>Intro text</p>
+				<p>Managing a project with multiple tasks that depend on each other, using only limited workers, gets complex fast. This game simulates you organising a music festival by assigning workers to activities.</p>
+				<p>Are you able to organise the festival in time before it is on?</p>
 				<h2>How to play</h2>
-				<p>some explainer text</p>
-				<p>This game is based on the simulation game by <a href="#">Ken Klassen (Brock University) and Keith Willoughby (Bucknell University) [1998]</a>.</p>
+				<p>You can drag and drop one of the workers below to assign them to activities. If more workers are assigned, the activity is completed faster. Not all activities can be done right away, some other activities may have to be completed first.</p>
+				<p>Once you've assigned workers, press Progress to advance the time.</p>
+				<p>While you try to stay on schedule, watch your budget and handle any unexpected changes!</p>
+				<p>This game is based on the <a href="#">simulation game</a> by Ken Klassen (Brock University) and Keith Willoughby (Bucknell University) [1998].</p>
 			</div>
-			<button id="description_toggle_button">Close</button>
+			<button id="description_toggle_button" class="description-button">
+				<span>&#128314;</span>
+			</button>
 		</section>
 		<section id="timeline">
-			<h4>Timeline</h4>
 			<div id="timeline_area" class="timeline-area"></div>
+			<button id="progress_button" class="progress-button">Progress</button>
 		</section>
 		<section id="workers">
 			<h4>Available workers</h4>

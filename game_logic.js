@@ -350,11 +350,16 @@ class ActivityNode {
 		this.workers         = [];
 		this.max_workers     = data['max_workers'] || 2;
 		this.emoji           = data['emoji'];
-		this.total_weeks     = data['total_weeks'];
+		this.total_weeks     = 0;
+		this.now             = 0;
 
 		this.init_gui();
 
 		this.setCompleted( data['completed'] || false );
+
+		// setup event listeners
+		window.addEventListener('nowupdate',   this.getNow.bind(this), false);
+		window.addEventListener('weeksupdate', this.getWeeks.bind(this), false);
 	}
 
 	getNode(id) {
@@ -468,7 +473,7 @@ class ActivityNode {
 	}
 
 	getExpectedStart () {
-		let expected_start = 0;
+		let expected_start = this.now;
 
 		if (this.hasStarted()) {
 			expected_start = this.started;
@@ -480,9 +485,6 @@ class ActivityNode {
 				if (pre_node) {
 					expected_start = Math.max(pre_node.getExpectedEnding(), expected_start);
 				}
-
-				// compensate for being one week off
-				// expected_start += 1;
 			}
 		}
 
@@ -493,6 +495,15 @@ class ActivityNode {
 		return this.getExpectedStart() + this.getTotalExpectedDuration();
 	}
 
+	getNow (inEvent) {
+		this.now = inEvent.detail.now;
+	}
+
+	getWeeks (inEvent) {
+		this.total_weeks = inEvent.detail.total_weeks;
+
+		this.update_gui();
+	}
 
 	// useful to check eligibility before actually assigning
 	canAssignWorker (workerID) {
@@ -577,6 +588,11 @@ class ActivityNode {
 		this.canProgress();
 		this.update_left();
 		this.update_top();
+		this.update_width();
+	}
+
+	update_gui () {
+		this.update_left();
 		this.update_width();
 	}
 
@@ -793,7 +809,9 @@ GameWorker.getNextID = function () {
 
 class PMGame {
 	constructor () {
-		this.d = game_data;
+		this.d             = game_data;
+		this.total_weeks   = 0;
+		this.gui_initiated = false;
 
 		// init activity structure
 		this.graph = new Graph();
@@ -814,11 +832,11 @@ class PMGame {
 			for (let c = 0; c < worker_type.count; c++) {
 				this.workers.push( new GameWorker(worker_type) );
 			}
-			
 		}
 
 		// init game variables
-		this.now = 0;
+		this.setTime(0);
+		this.updateTotalWeeks();
 
 		// remove the curtains
 		this.init_gui();
@@ -834,6 +852,34 @@ class PMGame {
 		return this.activities['end'].completed;
 	}
 
+	setTime (time) {
+		this.now = time;
+		let ev = new CustomEvent('nowupdate', {detail: {'now': this.now}});
+		window.dispatchEvent(ev);
+	}
+
+	updateTotalWeeks () {
+		let end_start = this.activities['end'].getExpectedStart();
+		let min_time  = this.d.max_time + this.d.overtime;
+
+		let new_total_weeks = Math.max(end_start, min_time);
+
+		if (new_total_weeks != this.total_weeks) {
+			this.total_weeks = new_total_weeks;
+			let ev = new CustomEvent('weeksupdate', {detail: {'total_weeks': this.total_weeks}});
+			window.dispatchEvent(ev);
+
+			this.update_gui();
+		}
+
+		return this.total_weeks;
+	}
+
+	getWeekPosition (week) {
+		let position = week / this.total_weeks;
+		return position;
+	}
+
 	reset () {
 		// reset workers
 		for (let i = this.workers.length - 1; i >= 0; i--) {
@@ -846,16 +892,23 @@ class PMGame {
 		}
 
 		// reset internal variables
-		this.now = 0;
+		this.setTime(0);
+
+		// update other stuff
+		this.update_gui();
 	}
 
 	canProgress () {
-		return (this.graph.getByFilter(this.activities, node => !node.canProgress()).length == 0);
+		let node_progress = (this.graph.getByFilter(this.activities, node => !node.canProgress()).length == 0);
+		let within_time   = (this.now <= this.d.max_time + this.d.overtime);
+		return (node_progress && within_time);
 	}
 
 	addProgress (stepSize) {
 		let step = stepSize || 1;
-		this.now += step;
+
+		// update time
+		this.setTime(this.now + step);
 
 		// call addProgress for each activity
 		for (let nodeKey in this.activities) {
@@ -880,8 +933,13 @@ class PMGame {
 						}
 					}
 				}
+
+				node.update_gui();
 			}
 		}
+
+		this.updateTotalWeeks();
+		this.update_gui();
 	}
 
 	getWorker (workerID) {
@@ -916,6 +974,10 @@ class PMGame {
 				if (ok_to_continue) {
 					let a_success = this.activities[activityID].assignWorker(worker.id);
 					let w_success = worker.assign(activityID);
+
+					// make sure UI reflects the new state
+					this.update_gui();
+
 					return (a_success && w_success);
 				}
 			}
@@ -933,6 +995,9 @@ class PMGame {
 			// if so, check if worker can unassign itself, by doing so
 			worker.unassign();
 
+			// make sure UI reflects the new state
+			this.update_gui();
+					
 			return true;
 		}
 		return false;
@@ -975,30 +1040,98 @@ class PMGame {
 	}
 
 	init_gui () {
+		// init description
+		this.el_description = document.getElementById('description');
+		this.description_open = true;
+		document.getElementById('description_toggle_button').addEventListener('click', this.toggleDescriptionArea.bind(this), false);
+
+		// init timeline
+		this.el_timeline = document.getElementById('timeline_area');
+		// generate a bunch of weeks (enough to never run out)
+		this.el_weeks = [];
+		for (var i = 0; i < 2 * this.total_weeks + 1; i++) {
+			let content = i;
+			let title   = 'Week ' + i;
+
+			if (i == this.d.max_time) {
+				content  = '&#9200;';
+				title   += ' (Deadline)';
+			} else if (i == this.d.max_time + this.d.overtime) {
+				content = '&#127914;';
+				title  += ' (Festival takes place)';
+			}
+			let week_el = Element.make('div', {
+				'id'       : 'week' + i,
+				'class'    : 'week-item',
+				'innerHTML': content,
+				'title'    : title
+			});
+			week_el.style.left = (this.getWeekPosition(i) * 0.85 + 0.08) * 100 + '%';
+			this.el_timeline.appendChild(week_el);
+			this.el_weeks.push(week_el);
+		}
+
+		this.el_now = Element.make('div', {
+			'id'   : 'week_now',
+			'class': 'week-item-now',
+			'title': 'Now'
+		});
+		this.el_timeline.appendChild(this.el_now);
+
+		this.el_progress_button = document.getElementById('progress_button');
+		this.el_progress_button.addEventListener('click', this.playTurn.bind(this), false);
+
 		// listen for drag and drop of workers
 
-		// TODO: remove // reset fixes some UI glitches
+
+		// signal we're done setting up the GUI
+		this.gui_initiated = true;
+
+		// TODO: remove // reset fixes some UI glitches for now
 		this.reset();
 	}
 
-	getWeekPosition (week) {
-		let position = week / (this.d.max_time + this.d.overtime);
-		return position;
+	update_gui () {
+		if (!this.gui_initiated) {
+			return;  // keeps us from running into undefined errors below
+		}
+
+		// adjust timeline
+		this.el_now.style.left = (this.getWeekPosition(this.now) * 0.85 + 0.08) * 100 + '%';
+		for (var i = 0; i < this.el_weeks.length; i++) {
+			this.el_weeks[i].style.left = (this.getWeekPosition(i) * 0.85 + 0.08) * 100 + '%';
+			this.el_weeks[i].style.display = (i <= this.total_weeks) ? '' : 'none';
+		}
+
+		// update progress ability
+		let can_progress = this.canProgress();
+		let time_available = (this.now <= (this.d.max_time + this.d.overtime));
+		this.el_progress_button.classList.toggle('cannot-progress', !can_progress);
+
+		let title = 'Click to progress one week';
+		if (!can_progress && !time_available) {
+			title = 'You missed the deadline, the festival is a mess...'
+		} else if (!can_progress) {
+			title = 'Check worker assignments before proceeding.';
+		}
+		this.el_progress_button.setAttribute('title', title);
+	}
+
+	toggleDescriptionArea () {
+		this.description_open = !this.description_open;
+		this.el_description.classList.toggle('description-hidden', this.description_open);
 	}
 
 	/**
 	TODO:
 	- layout activity divs
-	- set and update positions for activity divs
-	- add timeline
-	- add run/turn button
-	- add feedback
+	- add success/fail feedback
+	- add budget info
 	- fix description toggle
-
-
-	-- emojis:
-	clock   : &#9200;
-	festival: &#127914;
+	- implement drag and drop of workers
+	--- if no activity or 'restzone' at end of drag, reset to begin position
+	--- reset transform adjustments
+	--- re-append when successful, also update node duration, etc.
 	**/
 }
 
