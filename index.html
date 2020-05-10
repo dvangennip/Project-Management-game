@@ -13,9 +13,9 @@
 			<div id="description_area">
 				<h1>Project management game</h1>
 				<p>Managing a project with multiple tasks that depend on each other, using only limited workers, gets complex fast. This game simulates you organising a music festival by assigning workers to activities.</p>
-				<p>Are you able to organise the festival in time before it is on?</p>
+				<p>Are you able to organise the festival in time and within budget before it is on?</p>
 				<h2>How to play</h2>
-				<p>You can drag and drop one of the workers below to assign them to activities. If more workers are assigned, the activity is completed faster. Not all activities can be done right away, some other activities may have to be completed first.</p>
+				<p>You can drag and drop one of the workers below to assign them to activities. If more workers are assigned, the activity is completed faster. Not all activities can be done right away, some other activities may have to be completed first. You can use standard workers and extra workers, the latter cost you more.</p>
 				<p>Once you've assigned workers, press Progress to advance the time.</p>
 				<p>While you try to stay on schedule, watch your budget and handle any unexpected changes!</p>
 				<p>This game is based on the <a href="#">simulation game</a> by Ken Klassen (Brock University) and Keith Willoughby (Bucknell University) [1998].</p>
@@ -29,7 +29,7 @@
 			<button id="progress_button" class="progress-button">Progress</button>
 		</section>
 		<section id="workers">
-			<h4>Available workers</h4>
+			<h4>Available workers&nbsp;<span id="budget_header">Budget (<span id="budget_cumulative" title="Costs so far">0</span> + <span id="budget_current" title="This week's costs">0</span> + <span id="budget_fines" title="Fines"></span> / <span id="budget_available" title="Total budget available"></span>)</span></h4>
 			<div id="worker_area" class="worker-area"></div>
 		</section>
 		<section id="activities">
@@ -37,4 +37,4 @@
 			<div id="activity_area"></div>
 		</section>
 	</body>
-</html
+</html>

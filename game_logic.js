@@ -149,7 +149,8 @@ var game_data = {
 };
 
 class Graph {
-	constructor () {
+	constructor (pmg) {
+		this.pm_game     = pmg;
 		this.nodes       = {};
 		this.connections = {};
 
@@ -347,9 +348,11 @@ class ActivityNode {
 		this.progress        = data['progress'] || 0;
 		this.predecessors    = data['predecessors'] || [];
 		this.started         = -1;
+		this.finished        = undefined;
 		this.workers         = [];
 		this.max_workers     = data['max_workers'] || 2;
 		this.emoji           = data['emoji'];
+		this.cumulative_cost = 0;
 		this.total_weeks     = 0;
 		this.now             = 0;
 
@@ -364,6 +367,10 @@ class ActivityNode {
 
 	getNode(id) {
 		return this.graph.nodes[id];
+	}
+
+	getWorker (id) {
+		return this.graph.pm_game.getWorker(id);
 	}
 
 	addPredecessor (pre) {
@@ -391,7 +398,11 @@ class ActivityNode {
 	canStart () {
 		// check if all predecessors have completed
 		// note: every() returns true on empty arrays, which works fine here
-		let canStart = this.predecessors.every((node) => node.completed);
+		let canStart = this.predecessors.every((nodeID) => {
+			let node = this.getNode(nodeID);
+
+			return (node && node.completed);
+		});
 		this.el.classList.toggle('activity-can-start', canStart);
 		return canStart;
 	}
@@ -409,6 +420,12 @@ class ActivityNode {
 		this.completed = !!state;
 		if (this.completed && this.started == -1) {
 			this.started = 0;  // at least has some sensible value
+		}
+
+		if (this.completed) {
+			this.finished = this.now;
+		} else {
+			this.finished = undefined;
 		}
 		this.el.classList.toggle('activity-completed', this.completed);
 	}
@@ -431,6 +448,9 @@ class ActivityNode {
 				this.progress  = this.duration;
 				this.setCompleted(true);
 			}
+
+			// update costs
+			this.cumulative_cost += stepSize * this.getCurrentCost();
 
 			return true;
 		}
@@ -469,7 +489,13 @@ class ActivityNode {
 	}
 
 	getTotalExpectedDuration () {
-		return this.progress + this.getExpectedDuration();
+		if (this.hasStarted() && !this.completed) {
+			return (this.now - this.started) + this.getExpectedDuration();
+		} else if (this.completed) {
+			return this.finished - this.started;
+		} else {
+			return this.getExpectedDuration();
+		}
 	}
 
 	getExpectedStart () {
@@ -536,6 +562,23 @@ class ActivityNode {
 		return false; // could not remove
 	}
 
+	getCurrentCost () {
+		let cost = 0;
+		
+		for (var i = 0; i < this.workers.length; i++) {
+			let worker = this.getWorker(this.workers[i]);
+			
+			cost += worker.base_cost;
+
+			// add cowork cost if there are more workers
+			if (this.workers.length > 1) {
+				cost += worker.cowork_cost;
+			}
+		}
+
+		return cost;
+	}
+
 	reset () {
 		this.setStarted(-1);
 		this.setCompleted( (this.id == 'start') ? true : false );
@@ -594,6 +637,13 @@ class ActivityNode {
 	update_gui () {
 		this.update_left();
 		this.update_width();
+
+		if (this.id !== 'start' && this.id !== 'end') {
+			let can_accept_workers = (!this.completed && this.canStart() && this.workers.length < this.max_workers);
+			
+			this.el.classList.toggle('can-accept-workers',     can_accept_workers);
+			this.el.classList.toggle('cannot-accept-workers', !can_accept_workers);
+		}
 	}
 
 	update_left (left) {
@@ -604,13 +654,12 @@ class ActivityNode {
 				x = left;
 			} else {
 				if (this.hasStarted()) {
-					x = this.started / this.total_weeks;
+					x = (this.started / this.total_weeks) * 0.85 + 0.08;
 				} else {
 					// calculate a reasonable position based on predecessor durations
 					x = (this.getExpectedStart() / this.total_weeks) * 0.85 + 0.08;
 				}
 			}
-
 			this.el.style.left = (x * 100) + '%';
 		}
 	}
@@ -682,6 +731,18 @@ class ActivityNode {
 			let w = width || (this.getTotalExpectedDuration() / this.total_weeks);
 			this.el.style.width = (w * 0.85 * 100) + '%';
 		}
+	}
+
+	check_overlap (other_position) {
+		let s = this.el.getBoundingClientRect();
+		let o = other_position;
+
+		// use middle position for other element as it may not always fit entirely
+		if (s.left < o.x && s.right > o.x && s.top < o.y && s.bottom > o.y) {
+			return true;
+		}
+		// else
+		return false;
 	}
 }
 
@@ -765,6 +826,7 @@ class GameWorker {
 
 		if (inEvent.target === this.el) {
 			this.dragActive = true;
+			this.dragStartingElement = this.el.parentElement;
 			document.getElementsByTagName('body')[0].classList.toggle('drag-active', true);
 		}
 	}
@@ -784,16 +846,29 @@ class GameWorker {
 			this.offsetPos.x = this.currentPos.x;
 			this.offsetPos.y = this.currentPos.y;
 
-			this.setTranslate(this.currentPos.x, this.currentPos.y, this.el);
+			this.setTranslate(this.currentPos.x, this.currentPos.y);
 		}
 	}
 
 	dragEnd () {
-		//
-		this.initialPos.x = this.currentPos.x;
-		this.initialPos.y = this.currentPos.y;
-		this.dragActive = false;
-		document.getElementsByTagName('body')[0].classList.toggle('drag-active', false);
+		if (this.dragActive) {
+			// let assignment decisions happen elsewhere
+			let ev = new CustomEvent('workerdragend', {
+				detail: {
+					'worker'       : this,
+					'bounding_rect': this.el.getBoundingClientRect()
+				}
+			});
+			window.dispatchEvent(ev);
+
+			// always reset to original position
+			this.initialPos.x = this.currentPos.x = this.offsetPos.x = 0;
+			this.initialPos.y = this.currentPos.y = this.offsetPos.y = 0;
+			this.setTranslate(0,0);
+
+			this.dragActive = false;
+			document.getElementsByTagName('body')[0].classList.toggle('drag-active', false);
+		}
 	}
 
 	setTranslate (x, y) {
@@ -809,12 +884,13 @@ GameWorker.getNextID = function () {
 
 class PMGame {
 	constructor () {
-		this.d             = game_data;
-		this.total_weeks   = 0;
-		this.gui_initiated = false;
+		this.d                        = game_data;
+		this.total_weeks              = 0;
+		this.gui_initiated            = false;
+		this.cumulative_inactive_cost = 0;
 
 		// init activity structure
-		this.graph = new Graph();
+		this.graph = new Graph(this);
 
 		// add nodes
 		for (let i = 0; i < this.d.activities.length ; i++) {
@@ -919,24 +995,27 @@ class PMGame {
 				node.addProgress(step, this.now);
 
 				// unassign workers when complete
-				if (node.complete) {
+				if (node.completed) {
 					for (let i = node.workers.length - 1; i >= 0; i--) {
-						let removed_workerID = node.removeWorker( node.workers[i] );
-						
-						// when successful, also unassign the activity from the worker
-						if (removed_workerID) {
-							let worker = this.getWorker(removed_workerID);
-
-							if (worker.getActivity() == node.id) {
-								worker.unassign(node.id);
-							}
-						}
+						this.removeWorker(node.id, node.workers[i]);
 					}
 				}
 
 				node.update_gui();
 			}
 		}
+
+		// update budget with inactive worker fees
+		let unused_costs = this.workers.map(worker => {
+			if (!worker.isActive() && worker.type === 'regular') {
+				return worker.base_cost * step;
+			} else {
+				return 0;
+			}
+		});
+		this.cumulative_inactive_cost += unused_costs.reduce(
+			(accumulator, currentValue) => accumulator + currentValue  // reducer function
+		);
 
 		this.updateTotalWeeks();
 		this.update_gui();
@@ -952,9 +1031,9 @@ class PMGame {
 		return undefined;
 	}
 
-	// getActiveWorkers () {
-	// 	return this.workers.filter(worker => worker.isActive());
-	// }
+	getInactiveWorkers () {
+		return this.workers.filter(worker => !worker.isActive());
+	}
 
 	assignWorker (activityID, workerID) {
 		let worker = this.getWorker(workerID);
@@ -975,7 +1054,11 @@ class PMGame {
 					let a_success = this.activities[activityID].assignWorker(worker.id);
 					let w_success = worker.assign(activityID);
 
+					// re-parent the worker to the new activity
+					this.activities[activityID].el_worker_zone.appendChild(worker.el);
+
 					// make sure UI reflects the new state
+					this.activities[activityID].update_gui();
 					this.update_gui();
 
 					return (a_success && w_success);
@@ -988,14 +1071,18 @@ class PMGame {
 	removeWorker (activityID, workerID) {
 		let worker = this.getWorker(workerID);
 
-		if (worker) {
+		if (worker && activityID) {
 			// check if worker can be removed from activity, by removing it
 			this.activities[activityID].removeWorker(worker.id);
 
 			// if so, check if worker can unassign itself, by doing so
 			worker.unassign();
 
+			// remove worker element by adding it to the worker zone
+			document.getElementById('worker_area').appendChild(worker.el);
+
 			// make sure UI reflects the new state
+			this.activities[activityID].update_gui();
 			this.update_gui();
 					
 			return true;
@@ -1004,10 +1091,16 @@ class PMGame {
 	}
 
 	getBudget () {
-		let cumulative_costs = 0;
+		let cumulative_costs = this.cumulative_inactive_cost;
 		let current_costs    = 0;
 		let fines            = Math.max(0, this.now - this.d.max_time) * this.d.late_penalty_per_week;
 
+		// do a better check for fines
+		if (this.isFinished()) {
+			fines = Math.max(0, this.activities['end'].finished - this.d.max_time) * this.d.late_penalty_per_week;
+		}
+
+		// add per activity cumulative costs
 		for (let key in this.activities) {
 			cumulative_costs += this.activities[key].cumulative_cost;
 			current_costs    += this.getCurrentActivityCost(key);
@@ -1018,25 +1111,18 @@ class PMGame {
 			'cumulative_costs': cumulative_costs,
 			'current_costs'   : current_costs,
 			'fines'           : fines,
-			'total_costs'     : cumulative_costs + cumulative_costs + fines
+			'total_costs'     : cumulative_costs + current_costs + fines
 		}
 	}
 
 	getCurrentActivityCost (activityID) {
 		let activity = this.activities[activityID];
-		let cost = 0;
 		
-		for (let i = activity.workers.length - 1; i >= 0; i--) {
-			let worker = this.getWorker(activity.workers[i]);
-			cost += worker.base_cost;
-
-			// add cowork cost if there are more workers
-			if (activity.workers.length > 1) {
-				cost += worker.cowork_cost;
-			}
+		if (activity) {
+			return activity.getCurrentCost();
 		}
-
-		return cost;
+		// else
+		return 0;
 	}
 
 	init_gui () {
@@ -1082,7 +1168,7 @@ class PMGame {
 		this.el_progress_button.addEventListener('click', this.playTurn.bind(this), false);
 
 		// listen for drag and drop of workers
-
+		window.addEventListener('workerdragend', this.check_worker_drag.bind(this), false);
 
 		// signal we're done setting up the GUI
 		this.gui_initiated = true;
@@ -1115,6 +1201,15 @@ class PMGame {
 			title = 'Check worker assignments before proceeding.';
 		}
 		this.el_progress_button.setAttribute('title', title);
+
+		// update budget
+		let b = this.getBudget();
+		document.getElementById('budget_cumulative').innerHTML = b.cumulative_costs;
+		document.getElementById('budget_current').innerHTML    = b.current_costs;
+		document.getElementById('budget_fines').innerHTML      = b.fines;
+		document.getElementById('budget_available').innerHTML  = '&#128176; ' + b.budget;
+
+		document.getElementById('budget_header').classList.toggle('overbudget', (b.total_costs > b.budget));
 	}
 
 	toggleDescriptionArea () {
@@ -1122,16 +1217,46 @@ class PMGame {
 		this.el_description.classList.toggle('description-hidden', this.description_open);
 	}
 
+	check_worker_drag (inEvent) {
+		// attempt to find where a worker drag event ended
+		let worker               = inEvent.detail.worker;
+		let wr                   = inEvent.detail.bounding_rect;
+		let wp                   = {
+			'x': wr.left + (wr.right - wr.left) / 2,
+			'y': wr.top + (wr.bottom - wr.top) / 2
+		}
+		let overlapping_activity = undefined;
+
+		for (let key in this.activities)  {
+			if ( this.activities[key].check_overlap(wp) ) {
+				overlapping_activity = this.activities[key];
+			}
+		}
+
+		// when a suitable activity is found, assign the worker to it
+		if (overlapping_activity) {
+			this.assignWorker(overlapping_activity.id, worker.id);
+		} else {
+			// check if the worker zone was targeted
+			let s = document.getElementById('workers').getBoundingClientRect();
+
+			// use middle position for worker element as it may not always fit entirely
+			if (s.left < wp.x && s.right > wp.x && s.top < wp.y && s.bottom > wp.y) {
+				// remove worker from current activity (which resets to the worker zone)
+				this.removeWorker(worker.assigned_activity, worker.id);
+			}	
+		}
+	}
+
 	/**
 	TODO:
 	- layout activity divs
+	- add predecessor arrows
+	- check end position on every turn
 	- add success/fail feedback
-	- add budget info
+	- check fine calculation
 	- fix description toggle
-	- implement drag and drop of workers
-	--- if no activity or 'restzone' at end of drag, reset to begin position
-	--- reset transform adjustments
-	--- re-append when successful, also update node duration, etc.
+	- unused basic workers should still accrue costs
 	**/
 }
 
