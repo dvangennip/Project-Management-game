@@ -361,8 +361,10 @@ class ActivityNode {
 		this.setCompleted( data['completed'] || false );
 
 		// setup event listeners
-		window.addEventListener('nowupdate',   this.getNow.bind(this), false);
-		window.addEventListener('weeksupdate', this.getWeeks.bind(this), false);
+		window.addEventListener('nowupdate',            this.getNow.bind(this), false);
+		window.addEventListener('weeksupdate',          this.getWeeks.bind(this), false);
+		window.addEventListener('activitycompleted',    this.getActivityUpdate.bind(this), false);
+		window.addEventListener('activityworkerchange', this.getActivityUpdate.bind(this), false);
 	}
 
 	getNode(id) {
@@ -423,11 +425,17 @@ class ActivityNode {
 		}
 
 		if (this.completed) {
-			this.finished = this.now;
+			this.finished = (this.duration === 0) ? Math.max(this.started, this.now - 1) : this.now;
 		} else {
 			this.finished = undefined;
 		}
 		this.el.classList.toggle('activity-completed', this.completed);
+
+		// send out event to notify
+		if (this.completed) {
+			let ev = new CustomEvent('activitycompleted', {detail: {'activity': this.id} });
+			window.dispatchEvent(ev);
+		}
 	}
 
 	addProgress (stepSize, now) {
@@ -531,6 +539,22 @@ class ActivityNode {
 		this.update_gui();
 	}
 
+	getActivityUpdate (inEvent) {
+		let a_id = inEvent.detail.activity;
+
+		if (a_id === this.id) {
+			return;  // no need to handle own events
+		}
+
+		if (inEvent.type === 'activitycompleted' || inEvent.type === 'activityworkerchange') {
+			if (!this.hasStarted() && this.predecessors.indexOf(a_id) != -1) {
+				// re-evaluate this node's situation
+				this.canStart();
+				this.update_gui();
+			}
+		}
+	}
+
 	// useful to check eligibility before actually assigning
 	canAssignWorker (workerID) {
 		// note: does not check here if workerID exists
@@ -545,6 +569,10 @@ class ActivityNode {
 			let result = this.workers.push(workerID);
 			this.canProgress();
 			this.update_width();
+
+			let ev = new CustomEvent('activityworkerchange', {detail: {'activity': this.id} });
+			window.dispatchEvent(ev);
+
 			return result;
 		}
 		this.canProgress();
@@ -557,6 +585,10 @@ class ActivityNode {
 			let result = this.workers.splice(worker_index, 1);
 			this.canProgress();
 			this.update_width();
+
+			let ev = new CustomEvent('activityworkerchange', {detail: {'activity': this.id} });
+			window.dispatchEvent(ev);
+
 			return result;
 		}
 		return false; // could not remove
@@ -753,7 +785,7 @@ class GameWorker {
 		this.base_cost         = data['base_cost'] || 200;
 		this.cowork_cost       = data['cowork_cost'] || 50;
 		this.assigned_activity = data['assigned_activity'] || undefined;
-		this.emoji             = ['&#128034;', '&#128025;', '&#128029;', '&#129419;', '&#129412;', '&#128049;', '&#128025;', '&#128055;', '&#128040;'][this.id];
+		this.emoji             = ['&#128034;', '&#128025;', '&#128029;', '&#129419;', '&#129412;', '&#128049;', '&#128055;', '&#128040;'][this.id];
 		
 		this.init_gui();
 	}
@@ -977,7 +1009,7 @@ class PMGame {
 	canProgress () {
 		let node_progress = (this.graph.getByFilter(this.activities, node => !node.canProgress()).length == 0);
 		let within_time   = (this.now <= this.d.max_time + this.d.overtime);
-		return (node_progress && within_time);
+		return (node_progress && within_time && !this.isFinished());
 	}
 
 	addProgress (stepSize) {
@@ -1004,18 +1036,6 @@ class PMGame {
 				node.update_gui();
 			}
 		}
-
-		// update budget with inactive worker fees
-		let unused_costs = this.workers.map(worker => {
-			if (!worker.isActive() && worker.type === 'regular') {
-				return worker.base_cost * step;
-			} else {
-				return 0;
-			}
-		});
-		this.cumulative_inactive_cost += unused_costs.reduce(
-			(accumulator, currentValue) => accumulator + currentValue  // reducer function
-		);
 
 		this.updateTotalWeeks();
 		this.update_gui();
@@ -1093,7 +1113,13 @@ class PMGame {
 	getBudget () {
 		let cumulative_costs = this.cumulative_inactive_cost;
 		let current_costs    = 0;
-		let fines            = Math.max(0, this.now - this.d.max_time) * this.d.late_penalty_per_week;
+		let fines            = 0;
+
+		if (this.isFinished()) {
+			fines = Math.max(0, this.activities['end'].finished - this.d.max_time) * this.d.late_penalty_per_week;
+		} else {
+			fines = Math.max(0, this.now - this.d.max_time) * this.d.late_penalty_per_week;
+		}
 
 		// do a better check for fines
 		if (this.isFinished()) {
@@ -1207,14 +1233,26 @@ class PMGame {
 		document.getElementById('budget_cumulative').innerHTML = b.cumulative_costs;
 		document.getElementById('budget_current').innerHTML    = b.current_costs;
 		document.getElementById('budget_fines').innerHTML      = b.fines;
+		document.getElementById('budget_total').innerHTML      = '&#128184; ' + b.total_costs;
 		document.getElementById('budget_available').innerHTML  = '&#128176; ' + b.budget;
 
 		document.getElementById('budget_header').classList.toggle('overbudget', (b.total_costs > b.budget));
+
+		if (this.isFinished()) {
+			window.alert(`Congratulations!\n\nYou have completed the project in ${this.now-1} weeks.\n\nYour expenses were ${b.total_costs} versus a budget of ${b.budget}.`);
+		} else if (this.now > this.d.max_time + this.d.overtime) {
+			window.alert(`Unfortunately, you missed the deadline, the festival is a mess...`);	
+		}
 	}
 
 	toggleDescriptionArea () {
 		this.description_open = !this.description_open;
-		this.el_description.classList.toggle('description-hidden', this.description_open);
+		document.getElementsByTagName('body')[0].classList.toggle('no-description', !this.description_open);
+		this.el_description.classList.toggle('description-hidden', !this.description_open);
+		
+		if (!this.description_open) {
+			window.scrollTo(0,0);
+		}
 	}
 
 	check_worker_drag (inEvent) {
@@ -1252,11 +1290,6 @@ class PMGame {
 	TODO:
 	- layout activity divs
 	- add predecessor arrows
-	- check end position on every turn
-	- add success/fail feedback
-	- check fine calculation
-	- fix description toggle
-	- unused basic workers should still accrue costs
 	**/
 }
 

@@ -7,17 +7,27 @@ body {
 	background: #222;
 	margin: 0;
 	padding: 0;
-	font-family: sans-serif;
+	font-family: "Roboto", sans-serif;
 	color: #eee;
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
 	justify-content: flex-start;
-	overflow-y: hidden;
+	/*overflow-y: hidden;*/
 }
 
 h1, h2, h3, h4 {
+	font-family: "Clancy", "Roboto Slab", "Roboto", sans-serif;
 	margin: 1em 0 0 0;
+}
+
+h1 {
+	font-size: 2em;
+}
+
+h4 {
+	font-weight: 500;
+	font-size: 1.1em;
 }
 
 p {
@@ -34,16 +44,32 @@ a:active {
 
 /* ------------------------- */
 
+body {
+	background:
+		linear-gradient(90deg, #222 20px, transparent 1%) center,
+		linear-gradient(#222 20px, transparent 1%) center, #444;
+	background-size: 22px 22px;
+	background-position: 0px 0px;
+}
+
+body.no-description {
+	overflow-y: hidden;
+}
+
+/* ------------------------- */
+
 .description {
 	background: #eee;
 	color: #222;
-	/*display: flex;*/
-	display: none;
+	display: flex;
+	/*display: none;*/
 	flex-direction: column;
 	justify-content: flex-start;
 	align-items: center;
 	transition: max-height ease-in-out 0.5s;
-	max-height: 1000px;
+	max-height: 1300px;
+	min-height: fit-content;
+	min-height: -webkit-fit-content;
 }
 
 .description-hidden {
@@ -58,6 +84,36 @@ a:active {
 	max-width: 600px;
 	line-height: 1.5;
 	font-size: 1.1em;
+	padding: 1em 1em 2em 1em;
+}
+
+.description-hidden #description_area {
+	display: none;
+}
+
+.description-workers {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	margin: 1em 0;
+}
+
+.description-progress-button {
+	background: #7c1;
+	border: 2px solid #fff;
+	border-radius: 0 20px 20px 0;
+	padding: 6px;
+	color: #222;
+	font-weight: 700;
+	font-size: 0.9em;
+	animation-name: progressbutton;
+	animation-duration: 3s;
+	animation-iteration-count: infinite;
+}
+
+.description-acknowlegements {
+	color: #999;
+	font-size: 0.9em;
 }
 
 .description-button {
@@ -94,7 +150,7 @@ a:active {
 	position: absolute;
 }
 .description-hidden .description-button span {
-	transform: rotate(60deg);
+	transform: rotate(180deg);
 }
 
 /* ------------------------- */
@@ -106,6 +162,8 @@ a:active {
 	align-items: center;
 	background: #ffe600;
 	color: #333;
+	min-height: fit-content;
+	min-height: -webkit-fit-content;
 }
 
 #timeline_area {
@@ -188,18 +246,27 @@ a:active {
 	justify-content: center;
 	align-items: center;
 	background-color: #555;
+	min-height: fit-content;
+	min-height: -webkit-fit-content;
 }
 
 #worker_area {
 	background-color: #555;
 	padding: 10px;
+	min-height: 70px;
 }
 
 .worker-area {
 	display: flex;
-	flex-direction: flex-row;
+	flex-direction: row;
 	align-items: center;
 	justify-content: center;
+}
+
+#worker_area:empty::after {
+	content: "(all workers have been assigned)";
+	color: #bbb;
+	font-style: italic;
 }
 
 .worker {
@@ -211,11 +278,15 @@ a:active {
 	padding: 5px;
 	text-align: center;
 	width: 50px;
+	height: 50px;
 	touch-action: none;
 	user-select: none;
 	cursor: pointer;
 	box-shadow: 2px 2px 8px rgba(0,0,0,0.5);
 	z-index: 99;
+	display: flex;
+	justify-content: center;
+	align-items: center;
 }
 .worker:hover,
 .worker:active {
@@ -252,11 +323,11 @@ a:active {
 	justify-content: flex-start;
 	align-items: center;
 	flex-grow: 1;
-	background:
+	/*background:
 		linear-gradient(90deg, #222 20px, transparent 1%) center,
 		linear-gradient(#222 20px, transparent 1%) center, #444;
 	background-size: 22px 22px;
-	background-position: 0px 0px;
+	background-position: 0px 0px;*/
 }
 
 #activity_area {
@@ -281,7 +352,7 @@ a:active {
 }
 
 .activity-can-start {
-	background: #676;
+	background: #787;
 }
 
 .activity-started {
@@ -293,7 +364,7 @@ a:active {
 }
 
 .activity-completed {
-	background: #464;
+	background: #353;
 }
 
 .drag-active .can-accept-workers {
@@ -301,6 +372,9 @@ a:active {
 }
 .drag-active .cannot-accept-workers {
 	border: 2px solid #d55;
+}
+.drag-active .activity-completed {
+	border: 2px solid #333;
 }
 
 #activity_start {
