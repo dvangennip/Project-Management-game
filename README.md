@@ -1,6 +1,8 @@
 # Project Management game
 A short browser-based project management game based on a text by Klassen and Willoughby (1998)
 
+__[Try it online!](https://dvangennip.github.io/Project-Management-game/)__
+
 ## About the game
 
 Managing a project with multiple tasks that depend on each other, using only limited workers, gets complex fast. This game simulates you organising a music festival by assigning workers to activities.
