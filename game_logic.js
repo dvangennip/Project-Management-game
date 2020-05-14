@@ -166,6 +166,8 @@ class Graph {
 			'emoji'      : '&#127937',
 			'total_weeks': 12,
 		});
+
+		this.init_gui();
 	}
 
 	addNode (nodeData) {
@@ -215,12 +217,21 @@ class Graph {
 			}
 
 			// a connection is always added but may simply not be active
-			this.connections[aID + '>' + bID] = {
-				'id'         : aID + '>' + bID,
+			this.connections[id] = {
+				'id'         : id,
 				'origin'     : aID,
 				'destination': bID,
 				'active'     : activeState
 			};
+
+			// add arrow element (if it doesn't exist yet, which it shouldn't)
+			if (!document.getElementById(id)) {
+				let arrow = Element.make('div', {
+					'id'   : `arrow_${id}`,
+					'class': 'arrow'
+				});
+				document.getElementById('activity_area').appendChild(arrow);
+			}
 		}
 
 		if (!skipUpdate) {
@@ -229,9 +240,17 @@ class Graph {
 	}
 
 	removeConnection (aID, bID, skipUpdate) {
+		let id = aID + '>' + bID;
+
 		// check if connection exists
-		if (this.connections[aID + '>' + bID]) {
-			delete this.connections[aID + '>' + bID];
+		if (this.connections[id]) {
+			delete this.connections[id];
+
+			// remove arrow element
+			let arrow = document.getElementById(`arrow_${id}`);
+			if (arrow) {
+				document.getElementById('activity_area').removeChild(arrow);
+			}
 		}
 
 		if (!skipUpdate) {
@@ -265,13 +284,16 @@ class Graph {
 
 				// handle special cases where one of the nodes is start or end
 				if (this.nodes[ n.origin ] && n.origin === 'start') {
-					delete this.connections[key];
+					this.removeConnection(n.origin, n.destination, true);
+					// delete this.connections[key];
 				} else if (this.nodes[ n.destination ] && n.destination === 'end') {
-					delete this.connections[key];
+					this.removeConnection(n.origin, n.destination, true);
+					// delete this.connections[key];
 				}
 			} else {
 				// neither node exists
-				delete this.connections[key];
+				this.removeConnection(n.origin, n.destination, true);
+				// delete this.connections[key];
 			}
 		}
 
@@ -336,6 +358,42 @@ class Graph {
 		}
 
 		return structure;
+	}
+
+	init_gui () {
+		window.addEventListener('resize', this.update_gui.bind(this));
+	}
+
+	update_gui () {
+		// update connection arrows
+		for (let key in this.connections) {
+			let conn   = this.connections[key];
+
+			// get element by its id
+			let arrow  = document.getElementById(`arrow_${conn.id}`);
+
+			if (conn.active) {
+				let a_area_top = document.getElementById('activity_area').getBoundingClientRect().top;
+
+				// get in and out positions
+				let out_pos = this.nodes[conn.origin].getExitPosition();
+				let in_pos  = this.nodes[conn.destination].getEntryPosition();
+
+				// draw and place in appropriate spot
+				let length = Math.sqrt(Math.pow(in_pos.x - out_pos.x,2) + Math.pow(in_pos.y - out_pos.y,2));
+				let angle  = Math.atan2( (in_pos.y - out_pos.y) , (in_pos.x - out_pos.x) );
+				// console.log(conn.id, length, angle, out_pos, in_pos);
+
+				arrow.style.top       = (out_pos.y - a_area_top) + 'px';
+				arrow.style.left      = out_pos.x + 'px';
+				arrow.style.width     = length + 'px';
+				arrow.style.transform = `rotate(${angle}rad)`;
+				arrow.setAttribute('title', `${conn.origin} → ${conn.destination}`);
+				arrow.style.display   = '';
+			} else {
+				arrow.style.display = 'none';
+			}
+		}
 	}
 }
 
@@ -692,7 +750,7 @@ class ActivityNode {
 					x = (this.getExpectedStart() / this.total_weeks) * 0.85 + 0.08;
 				}
 			}
-			this.el.style.left = (x * 100) + '%';
+			this.el.style.left = this.el_style_left = (x * 100) + '%';
 		}
 	}
 
@@ -707,7 +765,7 @@ class ActivityNode {
 				y = this.getCrossPosition();
 			}
 
-			this.el.style.top = (y * 100) + '%';
+			this.el.style.top = this.el_style_top = (y * 100) + '%';
 		}
 	}
 
@@ -761,7 +819,7 @@ class ActivityNode {
 	update_width (width) {
 		if (this.id !== 'start' && this.id !== 'end') {
 			let w = width || (this.getTotalExpectedDuration() / this.total_weeks);
-			this.el.style.width = (w * 0.85 * 100) + '%';
+			this.el.style.width = this.el_style_width = (w * 0.85 * 100) + '%';
 		}
 	}
 
@@ -775,6 +833,24 @@ class ActivityNode {
 		}
 		// else
 		return false;
+	}
+
+	getEntryPosition () {
+		let s = this.el.getBoundingClientRect();
+		let e_pos = {
+			'x': s.left + 10,
+			'y': s.top + (s.height / 2)
+		}
+		return e_pos;
+	}
+
+	getExitPosition () {
+		let s = this.el.getBoundingClientRect();
+		let e_pos = {
+			'x': s.right - 10,
+			'y': s.top + (s.height / 2)
+		}
+		return e_pos;
 	}
 }
 
@@ -1238,6 +1314,9 @@ class PMGame {
 
 		document.getElementById('budget_header').classList.toggle('overbudget', (b.total_costs > b.budget));
 
+		// update arrows
+		this.graph.update_gui();
+
 		if (this.isFinished()) {
 			window.alert(`Congratulations!\n\nYou have completed the project in ${this.now-1} weeks.\n\nYour expenses were ${b.total_costs} versus a budget of ${b.budget}.`);
 		} else if (this.now > this.d.max_time + this.d.overtime) {
@@ -1288,8 +1367,7 @@ class PMGame {
 
 	/**
 	TODO:
-	- layout activity divs
-	- add predecessor arrows
+	- non-overlapping vertical layout activity divs
 	**/
 }
 
