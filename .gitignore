@@ -3,3 +3,5 @@ node_modules/*
 PM_Game_UNSW_2018.pdf
 .eslint*
 package*.json
+*.sublime-project
+*.sublime-workspace

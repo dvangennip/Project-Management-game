@@ -781,7 +781,7 @@ class ActivityNode {
 			}
 
 			let pre_average = 0;
-			let siblings    = [];
+			var siblings    = [];
 
 			// get predecessors
 			for (var i = 0; i < predecessors.length; i++) {
@@ -803,16 +803,19 @@ class ActivityNode {
 			pre_average = pre_average / predecessors.length;
 
 			// adjust position based on relative position to siblings to avoid overlap
-			let relative_pos = (siblings.indexOf(this.id) / (siblings.length - 1)) - 0.5;
+			var relative_pos = (siblings.indexOf(this.id) / (siblings.length - 1)) - 0.5;
 			if (isNaN(relative_pos)) {
 				relative_pos = 0;
 			}
-			// console.log(siblings, this.id, relative_pos);
+			// console.log(this.id, siblings, relative_pos);
 
 			// TODO remove random element
-			pos = (pre_average + relative_pos * 0.8) + Math.random() * 0.1;
+			pos = (pre_average + relative_pos * 0.8) ;//+ Math.random() * 0.1;
 		}
-		// console.log(this.id, pos);
+		console.log(this.id, pos, siblings, relative_pos);
+
+		// return the position, constrained within reasonable limits
+		// TODO improve limits by checking actual bounds
 		return Math.min(Math.max(pos, 0.05), 0.7);
 	}
 
@@ -1364,11 +1367,6 @@ class PMGame {
 			}	
 		}
 	}
-
-	/**
-	TODO:
-	- non-overlapping vertical layout activity divs
-	**/
 }
 
 // ----------------------------------------------------------------------------
